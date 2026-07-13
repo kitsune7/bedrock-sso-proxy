@@ -21,6 +21,7 @@ import (
 var modelsWithoutTemperature = []string{
 	"claude-opus-4-8",
 	"claude-opus-4-7",
+	"claude-sonnet-5",
 }
 
 // TranslateRequest converts an OpenAI ChatCompletionRequest into Bedrock ConverseInput.

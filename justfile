@@ -1,5 +1,14 @@
+set dotenv-load
+
 start:
   go run ./main.go
+
+heartbeat model="":
+  @port="${BEDROCK_PROXY_PORT:-8000}"; \
+    model="{{model}}"; \
+    curl -fsS -X POST "http://localhost:${port}/v1/chat/completions" \
+      -H 'Content-Type: application/json' \
+      -d '{"model":"'"${model}"'","stream":false,"messages":[{"role":"user","content":"Reply with exactly: ok"}]}'
 
 # Mac-specific
 set-up-launch-agent:
@@ -14,3 +23,9 @@ stop-launch-agent:
 
 check-launch-agent:
   launchctl print   gui/$(id -u)/local.bedrock-sso-proxy
+
+check-logs:
+  echo "Checking output logs..."; \
+  tail ~/Library/Logs/bedrock-sso-proxy.out.log; \
+  echo "Checking error logs..."; \
+  tail ~/Library/Logs/bedrock-sso-proxy.err.log
