@@ -218,3 +218,7 @@ Useful files:
 - `internal/bedrock/translate.go` translates OpenAI-shaped requests/responses to and from Bedrock Converse.
 - `internal/handler/chat.go` implements the OpenAI-compatible endpoints.
 - `internal/handler/ollama.go` implements the Ollama-compatible endpoints.
+
+## License
+
+MIT
