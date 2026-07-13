@@ -1,0 +1,29 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Go build, test, and coverage artifacts
+/bedrock-sso-proxy
+*.test
+*.out
+*.prof
+coverage/
+dist/
+bin/
+
+# Logs and runtime scratch files
+*.log
+tmp/
+
+# Editor and tool metadata
+.claude/
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
