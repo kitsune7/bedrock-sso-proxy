@@ -41,20 +41,25 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modelID := h.registry.ResolveModelID(req.Model)
+	resolved := h.registry.Resolve(req.Model)
 	if h.cfg.Verbose {
-		log.Printf("model: %s -> %s", req.Model, modelID)
+		log.Printf("model: %s -> %s (%s)", req.Model, resolved.ID, resolved.Backend)
+	}
+
+	if resolved.Backend == models.BackendMantleResponses {
+		h.handleMantle(w, r, &req, resolved)
+		return
 	}
 
 	if req.Stream {
-		h.handleStream(w, r, &req, modelID)
+		h.handleStream(w, r, &req, resolved)
 	} else {
-		h.handleNonStream(w, r, &req, modelID)
+		h.handleNonStream(w, r, &req, resolved)
 	}
 }
 
-func (h *ChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, modelID string) {
-	input, err := bedrock.TranslateRequest(req, modelID)
+func (h *ChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, resolved models.Resolved) {
+	input, err := bedrock.TranslateRequest(req, resolved)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
@@ -77,8 +82,8 @@ func (h *ChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, re
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, modelID string) {
-	input, err := bedrock.TranslateStreamRequest(req, modelID)
+func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, resolved models.Resolved) {
+	input, err := bedrock.TranslateStreamRequest(req, resolved)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return

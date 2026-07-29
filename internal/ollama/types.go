@@ -39,7 +39,7 @@ type ToolCallFunction struct {
 }
 
 type Tool struct {
-	Type     string      `json:"type"`
+	Type     string       `json:"type"`
 	Function ToolFunction `json:"function"`
 }
 
@@ -61,11 +61,11 @@ type Options struct {
 // Streaming responses emit a sequence of these as line-delimited JSON, with `done: true` on the final frame.
 // Non-streaming responses emit exactly one frame with `done: true`.
 type ChatResponse struct {
-	Model     string  `json:"model"`
-	CreatedAt string  `json:"created_at"`
-	Message   Message `json:"message"`
-	Done      bool    `json:"done"`
-	DoneReason string `json:"done_reason,omitempty"`
+	Model      string  `json:"model"`
+	CreatedAt  string  `json:"created_at"`
+	Message    Message `json:"message"`
+	Done       bool    `json:"done"`
+	DoneReason string  `json:"done_reason,omitempty"`
 
 	// Usage metrics — populated on the final frame. Durations are nanoseconds.
 	TotalDuration   int64 `json:"total_duration,omitempty"`

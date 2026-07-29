@@ -67,6 +67,17 @@ func NewManager(profile, region string) (*AuthManager, error) {
 	return am, nil
 }
 
+// NewManagerFromConfig builds an AuthManager around an existing AWS config,
+// skipping profile loading and SSO. Renewal is unavailable — there is no
+// profile to log in to — so this is for tests and for callers that already hold
+// credentials.
+func NewManagerFromConfig(cfg aws.Config) *AuthManager {
+	return &AuthManager{
+		cfg:    cfg,
+		client: bedrockruntime.NewFromConfig(cfg),
+	}
+}
+
 // Client returns the current Bedrock runtime client.
 func (am *AuthManager) Client() *bedrockruntime.Client {
 	am.mu.Lock()
@@ -74,36 +85,57 @@ func (am *AuthManager) Client() *bedrockruntime.Client {
 	return am.client
 }
 
+// Config returns the current AWS config. Callers that talk to an endpoint the
+// pinned SDK has no client for (bedrock-mantle) sign requests from it directly.
+func (am *AuthManager) Config() aws.Config {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	return am.cfg
+}
+
 // WithRetry executes fn with the current client. If fn returns an SSO credential
 // error, it triggers re-authentication and retries fn exactly once.
 func (am *AuthManager) WithRetry(ctx context.Context, fn func(*bedrockruntime.Client) error) error {
-	client := am.Client()
-	err := fn(client)
-	if err == nil {
-		return nil
-	}
+	return am.withRetry(ctx, func() error { return fn(am.Client()) })
+}
 
-	if !isSSOError(err) {
+// WithRetryConfig is WithRetry for backends reached without an SDK client — it
+// hands fn the AWS config so it can sign its own requests.
+func (am *AuthManager) WithRetryConfig(ctx context.Context, fn func(aws.Config) error) error {
+	return am.withRetry(ctx, func() error { return fn(am.Config()) })
+}
+
+func (am *AuthManager) withRetry(ctx context.Context, fn func() error) error {
+	err := fn()
+	if err == nil || !isSSOError(err) {
 		return err
 	}
+	if am.profile == "" {
+		// Nothing to log in to — see NewManagerFromConfig.
+		return err
+	}
+	if renewErr := am.renew(ctx); renewErr != nil {
+		return fmt.Errorf("%w (original error: %v)", renewErr, err)
+	}
+	// Retry once with fresh credentials.
+	return fn()
+}
 
-	// SSO expired — acquire lock and renew
+// renew re-authenticates and rebuilds the config and client. fn must be called
+// outside this lock — the accessors take it too, and it is not reentrant.
+func (am *AuthManager) renew(ctx context.Context) error {
 	am.mu.Lock()
 	defer am.mu.Unlock()
 
 	log.Println("SSO session expired during request. Launching browser for re-authentication...")
-	if loginErr := am.runSSOLogin(); loginErr != nil {
-		return fmt.Errorf("SSO re-authentication failed: %w (original error: %v)", loginErr, err)
+	if err := am.runSSOLogin(); err != nil {
+		return fmt.Errorf("SSO re-authentication failed: %w", err)
 	}
-
-	if loadErr := am.loadConfig(ctx); loadErr != nil {
-		return fmt.Errorf("failed to reload AWS config after SSO login: %w", loadErr)
+	if err := am.loadConfig(ctx); err != nil {
+		return fmt.Errorf("failed to reload AWS config after SSO login: %w", err)
 	}
-
 	am.client = bedrockruntime.NewFromConfig(am.cfg)
-
-	// Retry once with fresh credentials
-	return fn(am.client)
+	return nil
 }
 
 func (am *AuthManager) loadConfig(ctx context.Context) error {

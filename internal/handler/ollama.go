@@ -37,9 +37,9 @@ func (h *OllamaChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modelID := h.registry.ResolveModelID(req.Model)
+	resolved := h.registry.Resolve(req.Model)
 	if h.cfg.Verbose {
-		log.Printf("ollama model: %s -> %s", req.Model, modelID)
+		log.Printf("ollama model: %s -> %s (%s)", req.Model, resolved.ID, resolved.Backend)
 	}
 
 	openaiReq, err := ollamaToOpenAI(&req)
@@ -48,15 +48,20 @@ func (h *OllamaChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if resolved.Backend == models.BackendMantleResponses {
+		h.handleMantle(w, r, &req, openaiReq, resolved)
+		return
+	}
+
 	if req.StreamEnabled() {
-		h.handleStream(w, r, &req, openaiReq, modelID)
+		h.handleStream(w, r, &req, openaiReq, resolved)
 	} else {
-		h.handleNonStream(w, r, &req, openaiReq, modelID)
+		h.handleNonStream(w, r, &req, openaiReq, resolved)
 	}
 }
 
-func (h *OllamaChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, modelID string) {
-	input, err := bedrock.TranslateRequest(openaiReq, modelID)
+func (h *OllamaChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, resolved models.Resolved) {
+	input, err := bedrock.TranslateRequest(openaiReq, resolved)
 	if err != nil {
 		writeOllamaError(w, http.StatusBadRequest, err.Error())
 		return
@@ -99,8 +104,8 @@ func (h *OllamaChatHandler) handleNonStream(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (h *OllamaChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, modelID string) {
-	input, err := bedrock.TranslateStreamRequest(openaiReq, modelID)
+func (h *OllamaChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, resolved models.Resolved) {
+	input, err := bedrock.TranslateStreamRequest(openaiReq, resolved)
 	if err != nil {
 		writeOllamaError(w, http.StatusBadRequest, err.Error())
 		return
@@ -134,8 +139,8 @@ func (h *OllamaChatHandler) handleStream(w http.ResponseWriter, r *http.Request,
 	defer stream.Close()
 
 	var (
-		doneReason      string
-		promptTokens    int
+		doneReason       string
+		promptTokens     int
 		completionTokens int
 
 		// Buffer tool-use arguments across ContentBlockDelta events; emit on stop.
@@ -210,24 +215,13 @@ func (h *OllamaChatHandler) handleStream(w http.ResponseWriter, r *http.Request,
 		EvalCount:       completionTokens,
 	}
 
-	if len(toolByIndex) > 0 {
-		for _, pc := range toolByIndex {
-			var argsMap map[string]any
-			if pc.ArgsRaw != "" {
-				if err := json.Unmarshal([]byte(pc.ArgsRaw), &argsMap); err != nil {
-					argsMap = map[string]any{"raw": pc.ArgsRaw}
-				}
-			}
-			if argsMap == nil {
-				argsMap = map[string]any{}
-			}
-			final.Message.ToolCalls = append(final.Message.ToolCalls, ollama.ToolCall{
-				Function: ollama.ToolCallFunction{
-					Name:      pc.Name,
-					Arguments: argsMap,
-				},
-			})
-		}
+	for _, pc := range toolByIndex {
+		final.Message.ToolCalls = append(final.Message.ToolCalls, ollama.ToolCall{
+			Function: ollama.ToolCallFunction{
+				Name:      pc.Name,
+				Arguments: decodeToolArgs(pc.ArgsRaw),
+			},
+		})
 	}
 
 	if err := enc.Encode(final); err != nil {

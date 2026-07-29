@@ -5,16 +5,16 @@ import "encoding/json"
 // --- Request types ---
 
 type ChatCompletionRequest struct {
-	Model            string          `json:"model"`
-	Messages         []Message       `json:"messages"`
-	Stream           bool            `json:"stream,omitempty"`
-	MaxTokens        *int32          `json:"max_tokens,omitempty"`
-	Temperature      *float32        `json:"temperature,omitempty"`
-	TopP             *float32        `json:"top_p,omitempty"`
-	Stop             StringOrStrings `json:"stop,omitempty"`
-	Tools            []Tool          `json:"tools,omitempty"`
-	ToolChoice       json.RawMessage `json:"tool_choice,omitempty"`
-	StreamOptions    *StreamOptions  `json:"stream_options,omitempty"`
+	Model         string          `json:"model"`
+	Messages      []Message       `json:"messages"`
+	Stream        bool            `json:"stream,omitempty"`
+	MaxTokens     *int32          `json:"max_tokens,omitempty"`
+	Temperature   *float32        `json:"temperature,omitempty"`
+	TopP          *float32        `json:"top_p,omitempty"`
+	Stop          StringOrStrings `json:"stop,omitempty"`
+	Tools         []Tool          `json:"tools,omitempty"`
+	ToolChoice    json.RawMessage `json:"tool_choice,omitempty"`
+	StreamOptions *StreamOptions  `json:"stream_options,omitempty"`
 }
 
 type StreamOptions struct {
@@ -70,8 +70,11 @@ type FunctionDef struct {
 }
 
 type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
+	// ID and Type are omitted when empty so streaming continuation deltas match
+	// OpenAI, which sends only index and the arguments fragment after the first
+	// chunk of a tool call. Both are always set on complete tool calls.
+	ID       string       `json:"id,omitempty"`
+	Type     string       `json:"type,omitempty"`
 	Function FunctionCall `json:"function"`
 	Index    *int         `json:"index,omitempty"`
 }
@@ -119,9 +122,9 @@ type ChatCompletionResponse struct {
 }
 
 type Choice struct {
-	Index        int      `json:"index"`
-	Message      Message  `json:"message"`
-	FinishReason *string  `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason *string `json:"finish_reason"`
 }
 
 type Usage struct {

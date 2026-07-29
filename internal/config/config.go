@@ -25,7 +25,7 @@ func Parse() *Config {
 	flag.IntVar(&cfg.Port, "port", 8000, "listen port")
 	flag.StringVar(&cfg.AWSProfile, "profile", "", "AWS SSO profile name")
 	flag.StringVar(&cfg.AWSRegion, "region", "us-east-1", "AWS region")
-	flag.StringVar(&cfg.DefaultModel, "default-model", "claude-opus-4-8", "default model when request omits it")
+	flag.StringVar(&cfg.DefaultModel, "default-model", "gpt-5.5", "default model when request omits it")
 	flag.BoolVar(&cfg.CrossRegion, "cross-region", true, "prepend region prefix to model IDs for cross-region inference")
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "enable verbose logging")
 	flag.Parse()

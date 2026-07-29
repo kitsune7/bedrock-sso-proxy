@@ -3,7 +3,6 @@ package bedrock
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,27 +11,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/google/uuid"
 
+	"bedrock-sso-proxy/internal/models"
 	"bedrock-sso-proxy/internal/openai"
 )
 
-// modelsWithoutTemperature lists model-ID substrings for which Bedrock rejects
-// the `temperature` inference parameter. Match is case-insensitive and
-// substring-based so it covers alias, bare ID, and region-prefixed forms.
-var modelsWithoutTemperature = []string{
-	"claude-opus-4-8",
-	"claude-opus-4-7",
-	"claude-sonnet-5",
-}
-
 // TranslateRequest converts an OpenAI ChatCompletionRequest into Bedrock ConverseInput.
-func TranslateRequest(req *openai.ChatCompletionRequest, modelID string) (*bedrockruntime.ConverseInput, error) {
+func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseInput, error) {
 	system, messages, err := translateMessages(req.Messages)
 	if err != nil {
 		return nil, err
 	}
 
 	input := &bedrockruntime.ConverseInput{
-		ModelId:  aws.String(modelID),
+		ModelId:  aws.String(m.ID),
 		Messages: messages,
 	}
 
@@ -40,7 +31,7 @@ func TranslateRequest(req *openai.ChatCompletionRequest, modelID string) (*bedro
 		input.System = system
 	}
 
-	if inferCfg := translateInferenceConfig(req, modelID); inferCfg != nil {
+	if inferCfg := translateInferenceConfig(req, m); inferCfg != nil {
 		input.InferenceConfig = inferCfg
 	}
 
@@ -54,14 +45,14 @@ func TranslateRequest(req *openai.ChatCompletionRequest, modelID string) (*bedro
 }
 
 // TranslateStreamRequest converts an OpenAI ChatCompletionRequest into Bedrock ConverseStreamInput.
-func TranslateStreamRequest(req *openai.ChatCompletionRequest, modelID string) (*bedrockruntime.ConverseStreamInput, error) {
+func TranslateStreamRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseStreamInput, error) {
 	system, messages, err := translateMessages(req.Messages)
 	if err != nil {
 		return nil, err
 	}
 
 	input := &bedrockruntime.ConverseStreamInput{
-		ModelId:  aws.String(modelID),
+		ModelId:  aws.String(m.ID),
 		Messages: messages,
 	}
 
@@ -69,7 +60,7 @@ func TranslateStreamRequest(req *openai.ChatCompletionRequest, modelID string) (
 		input.System = system
 	}
 
-	if inferCfg := translateInferenceConfig(req, modelID); inferCfg != nil {
+	if inferCfg := translateInferenceConfig(req, m); inferCfg != nil {
 		input.InferenceConfig = inferCfg
 	}
 
@@ -268,20 +259,23 @@ func appendOrCoalesce(messages []types.Message, role types.ConversationRole, con
 	})
 }
 
-func translateInferenceConfig(req *openai.ChatCompletionRequest, modelID string) *types.InferenceConfiguration {
+func translateInferenceConfig(req *openai.ChatCompletionRequest, m models.Resolved) *types.InferenceConfiguration {
 	cfg := &types.InferenceConfiguration{}
 	hasField := false
 
-	if req.MaxTokens != nil {
-		cfg.MaxTokens = req.MaxTokens
+	if maxTokens := m.AdjustMaxTokens(req.MaxTokens); maxTokens != nil {
+		cfg.MaxTokens = maxTokens
 		hasField = true
 	}
-	if req.Temperature != nil && !modelRejectsTemperature(modelID) {
+	if req.Temperature != nil && !m.NoSampling {
 		t := float32(*req.Temperature)
 		cfg.Temperature = &t
 		hasField = true
 	}
-	if req.TopP != nil {
+	// Anthropic models reject temperature and top_p together, so top_p yields to
+	// an explicit temperature rather than failing the request.
+	dropTopP := m.NoSampling || (m.ExclusiveSampling && cfg.Temperature != nil)
+	if req.TopP != nil && !dropTopP {
 		p := float32(*req.TopP)
 		cfg.TopP = &p
 		hasField = true
@@ -295,16 +289,6 @@ func translateInferenceConfig(req *openai.ChatCompletionRequest, modelID string)
 		return nil
 	}
 	return cfg
-}
-
-func modelRejectsTemperature(modelID string) bool {
-	lower := strings.ToLower(modelID)
-	for _, needle := range modelsWithoutTemperature {
-		if strings.Contains(lower, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 func translateToolConfig(req *openai.ChatCompletionRequest) (*types.ToolConfiguration, error) {
