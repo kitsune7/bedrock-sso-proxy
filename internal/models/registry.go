@@ -80,10 +80,14 @@ var defaultModels = []Model{
 
 	// The GPT-5 family is reachable only through the OpenAI Responses API on
 	// the bedrock-mantle endpoint — no Converse, no Invoke, no bedrock-runtime.
-	// No geo or global inference profiles exist, and they are in-region only in
-	// us-east-1 and us-east-2.
+	// No geo or global inference profiles exist, and they are in-region only:
+	// us-east-1 and us-east-2 for all of them, plus us-west-2 for 5.6 terra and
+	// luna.
 	// Aliases keep the vendor's own spelling, so clients configured for OpenAI
 	// can point at the proxy unchanged.
+	{Alias: "gpt-5.6-sol", BedrockID: "openai.gpt-5.6-sol", OwnedBy: "openai", Backend: BackendMantleResponses, NoSampling: true, Reasoning: true},
+	{Alias: "gpt-5.6-terra", BedrockID: "openai.gpt-5.6-terra", OwnedBy: "openai", Backend: BackendMantleResponses, NoSampling: true, Reasoning: true},
+	{Alias: "gpt-5.6-luna", BedrockID: "openai.gpt-5.6-luna", OwnedBy: "openai", Backend: BackendMantleResponses, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-5.5", BedrockID: "openai.gpt-5.5", OwnedBy: "openai", Backend: BackendMantleResponses, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-5.4", BedrockID: "openai.gpt-5.4", OwnedBy: "openai", Backend: BackendMantleResponses, NoSampling: true, Reasoning: true},
 }

@@ -117,6 +117,11 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		{"gpt-oss-120b:latest", "openai.gpt-oss-120b-1:0", BackendConverse},
 		{"openai.gpt-oss-20b-1:0", "openai.gpt-oss-20b-1:0", BackendConverse},
 		// GPT-5 is Responses-API only, and likewise has no inference profile.
+		{"gpt-5.6-sol", "openai.gpt-5.6-sol", BackendMantleResponses},
+		{"gpt-5.6-sol:latest", "openai.gpt-5.6-sol", BackendMantleResponses},
+		{"openai.gpt-5.6-sol", "openai.gpt-5.6-sol", BackendMantleResponses},
+		{"gpt-5.6-terra", "openai.gpt-5.6-terra", BackendMantleResponses},
+		{"gpt-5.6-luna", "openai.gpt-5.6-luna", BackendMantleResponses},
 		{"gpt-5.5", "openai.gpt-5.5", BackendMantleResponses},
 		{"gpt-5.5:latest", "openai.gpt-5.5", BackendMantleResponses},
 		{"openai.gpt-5.5", "openai.gpt-5.5", BackendMantleResponses},
@@ -154,6 +159,9 @@ func TestResolve_Traits(t *testing.T) {
 		{"claude-opus-4-8", true, false, true},
 		{"claude-opus-4-7", true, false, true},
 		{"claude-sonnet-5", true, false, true},
+		{"gpt-5.6-sol", true, false, true},
+		{"gpt-5.6-terra", true, false, true},
+		{"gpt-5.6-luna", true, false, true},
 		{"gpt-5.5", true, false, true},
 		// gpt-oss reasons, and unlike Anthropic accepts temperature and top_p
 		// in the same request.
