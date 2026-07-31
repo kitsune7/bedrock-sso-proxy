@@ -1,9 +1,14 @@
 package bedrock
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
 	"bedrock-sso-proxy/internal/models"
 	"bedrock-sso-proxy/internal/openai"
@@ -122,4 +127,98 @@ func TestTranslateInferenceConfig_ReasoningMaxTokensFloor(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTranslateContentBlocks_Images(t *testing.T) {
+	// A 1x1 PNG. Converse takes raw bytes or an S3 location — never a URL — so
+	// the translation has to decode the payload rather than forward it.
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+
+	raw := func(v any) json.RawMessage {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+
+	t.Run("data URL becomes an image block with bytes", func(t *testing.T) {
+		msg := openai.Message{Role: "user", Content: raw([]map[string]any{
+			{"type": "text", "text": "what is this"},
+			{"type": "image_url", "image_url": map[string]string{"url": "data:image/png;base64," + pngB64}},
+		})}
+
+		blocks, err := translateContentBlocks(context.Background(), msg)
+		if err != nil {
+			t.Fatalf("translateContentBlocks: %v", err)
+		}
+		if len(blocks) != 2 {
+			t.Fatalf("len(blocks) = %d, want 2", len(blocks))
+		}
+		if _, ok := blocks[0].(*types.ContentBlockMemberText); !ok {
+			t.Errorf("blocks[0] = %T, want a text block", blocks[0])
+		}
+		img, ok := blocks[1].(*types.ContentBlockMemberImage)
+		if !ok {
+			t.Fatalf("blocks[1] = %T, want an image block", blocks[1])
+		}
+		if img.Value.Format != types.ImageFormatPng {
+			t.Errorf("Format = %q, want png", img.Value.Format)
+		}
+		src, ok := img.Value.Source.(*types.ImageSourceMemberBytes)
+		if !ok {
+			t.Fatalf("Source = %T, want bytes", img.Value.Source)
+		}
+		want, err := base64.StdEncoding.DecodeString(pngB64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(src.Value, want) {
+			t.Error("image bytes do not match the decoded payload")
+		}
+	})
+
+	t.Run("s3 URI becomes an S3 location", func(t *testing.T) {
+		msg := openai.Message{Role: "user", Content: raw([]map[string]any{
+			{"type": "image_url", "image_url": map[string]string{"url": "s3://bucket/pic.jpg"}},
+		})}
+
+		blocks, err := translateContentBlocks(context.Background(), msg)
+		if err != nil {
+			t.Fatalf("translateContentBlocks: %v", err)
+		}
+		img := blocks[0].(*types.ContentBlockMemberImage)
+		if img.Value.Format != types.ImageFormatJpeg {
+			t.Errorf("Format = %q, want jpeg from the extension", img.Value.Format)
+		}
+		src, ok := img.Value.Source.(*types.ImageSourceMemberS3Location)
+		if !ok {
+			t.Fatalf("Source = %T, want an S3 location", img.Value.Source)
+		}
+		if aws.ToString(src.Value.Uri) != "s3://bucket/pic.jpg" {
+			t.Errorf("Uri = %q, want the URI unchanged", aws.ToString(src.Value.Uri))
+		}
+	})
+
+	// Images used to be dropped here, which sent a vision request to the model as
+	// text-only and produced a confidently wrong answer with no error.
+	t.Run("unusable image is an error, not a drop", func(t *testing.T) {
+		msg := openai.Message{Role: "user", Content: raw([]map[string]any{
+			{"type": "image_url", "image_url": map[string]string{"url": "ftp://host/pic.png"}},
+		})}
+		if _, err := translateContentBlocks(context.Background(), msg); err == nil {
+			t.Error("expected an error for an unsupported image scheme")
+		}
+	})
+
+	t.Run("plain string content still works", func(t *testing.T) {
+		blocks, err := translateContentBlocks(context.Background(), openai.Message{Role: "user", Content: raw("hi")})
+		if err != nil {
+			t.Fatalf("translateContentBlocks: %v", err)
+		}
+		text, ok := blocks[0].(*types.ContentBlockMemberText)
+		if !ok || text.Value != "hi" {
+			t.Errorf("blocks[0] = %+v, want a text block with hi", blocks[0])
+		}
+	})
 }

@@ -59,7 +59,7 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, resolved models.Resolved) {
-	input, err := bedrock.TranslateRequest(req, resolved)
+	input, err := bedrock.TranslateRequest(r.Context(), req, resolved)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
@@ -83,7 +83,7 @@ func (h *ChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, re
 }
 
 func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, resolved models.Resolved) {
-	input, err := bedrock.TranslateStreamRequest(req, resolved)
+	input, err := bedrock.TranslateStreamRequest(r.Context(), req, resolved)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return

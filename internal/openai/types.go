@@ -54,8 +54,35 @@ func (m *Message) ContentString() string {
 }
 
 type ContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
+}
+
+// ImageURL is the image_url content part. Detail is accepted and ignored —
+// neither Bedrock API has an equivalent, and rejecting the request over it
+// would break clients that always send it.
+type ImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// Parts normalizes a message's content into content parts. A plain string
+// becomes a single text part, so callers that care about images can treat both
+// content forms the same way. Returns nil when there is no content.
+func (m *Message) Parts() []ContentPart {
+	if len(m.Content) == 0 {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err == nil {
+		return []ContentPart{{Type: "text", Text: s}}
+	}
+	var parts []ContentPart
+	if err := json.Unmarshal(m.Content, &parts); err == nil {
+		return parts
+	}
+	return nil
 }
 
 type Tool struct {

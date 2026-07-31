@@ -1,12 +1,14 @@
 package mantle
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
+	"bedrock-sso-proxy/internal/imageref"
 	"bedrock-sso-proxy/internal/models"
 	"bedrock-sso-proxy/internal/openai"
 )
@@ -19,7 +21,9 @@ import (
 // Responses has a flat list of typed items where a function call and its output
 // are siblings of the messages around them. System messages become the
 // top-level `instructions` field.
-func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*Request, error) {
+//
+// ctx bounds the image fetches an image_url content part may require.
+func TranslateRequest(ctx context.Context, req *openai.ChatCompletionRequest, m models.Resolved) (*Request, error) {
 	out := &Request{
 		Model:  m.ID,
 		Stream: req.Stream,
@@ -50,10 +54,14 @@ func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*Re
 			}
 
 		case "user":
+			content, err := userContent(ctx, msg)
+			if err != nil {
+				return nil, err
+			}
 			out.Input = append(out.Input, InputItem{
 				Type:    "message",
 				Role:    "user",
-				Content: []ContentPart{{Type: "input_text", Text: msg.ContentString()}},
+				Content: content,
 			})
 
 		case "assistant":
@@ -61,8 +69,10 @@ func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*Re
 				out.Input = append(out.Input, InputItem{
 					Type: "message",
 					Role: "assistant",
-					// Assistant text sent back as context is still input.
-					Content: []ContentPart{{Type: "input_text", Text: text}},
+					// Assistant history uses "output_text", not "input_text" —
+					// Mantle's union rejects an assistant message carrying an
+					// input_text part, which breaks every multi-turn request.
+					Content: []ContentPart{{Type: "output_text", Text: text}},
 				})
 			}
 			for _, tc := range msg.ToolCalls {
@@ -87,6 +97,13 @@ func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*Re
 	}
 	out.Instructions = instructions
 
+	// Responses requires at least one input item — a request carrying only
+	// system/developer messages yields none. Report it as the client error it is
+	// rather than letting Mantle's 400 surface as a 502.
+	if len(out.Input) == 0 {
+		return nil, fmt.Errorf("request has no user, assistant, or tool messages")
+	}
+
 	for _, t := range req.Tools {
 		if t.Type != "function" {
 			continue
@@ -107,6 +124,47 @@ func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*Re
 		out.ToolChoice = toolChoice
 	}
 
+	return out, nil
+}
+
+// userContent builds the content parts for a user message, resolving any
+// image_url parts into the data: URL Mantle requires. Chat Completions nests the
+// URL under an object and allows https; Mantle takes a bare string and allows
+// only data: and s3://, so an https image has to be fetched and inlined.
+func userContent(ctx context.Context, msg openai.Message) ([]ContentPart, error) {
+	parts := msg.Parts()
+	// A message with no parseable content still has to carry one part — Mantle
+	// rejects a message with an empty content array.
+	if len(parts) == 0 {
+		return []ContentPart{{Type: "input_text"}}, nil
+	}
+
+	var out []ContentPart
+	for _, p := range parts {
+		switch p.Type {
+		case "text":
+			out = append(out, ContentPart{Type: "input_text", Text: p.Text})
+
+		case "image_url":
+			if p.ImageURL == nil || p.ImageURL.URL == "" {
+				return nil, fmt.Errorf("image_url content part has no url")
+			}
+			ref, err := imageref.Resolve(ctx, nil, p.ImageURL.URL)
+			if err != nil {
+				return nil, fmt.Errorf("image_url content part: %w", err)
+			}
+			url := ref.S3URI
+			if url == "" {
+				url = ref.DataURL()
+			}
+			out = append(out, ContentPart{Type: "input_image", ImageURL: url})
+
+		default:
+			// Audio and file parts have no Responses equivalent here. Failing is
+			// better than silently dropping content the caller believes was sent.
+			return nil, fmt.Errorf("unsupported content part type: %s", p.Type)
+		}
+	}
 	return out, nil
 }
 

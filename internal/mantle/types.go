@@ -33,20 +33,33 @@ type InputItem struct {
 	Role    string        `json:"role,omitempty"`
 	Content []ContentPart `json:"content,omitempty"`
 
-	// Type "function_call".
+	// Type "function_call". Arguments has no omitempty: Mantle validates `input`
+	// as a strict union and rejects a function_call with the key absent, even
+	// for a no-argument function. An empty string is accepted.
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
-	Arguments string `json:"arguments,omitempty"`
+	Arguments string `json:"arguments"`
 
-	// Type "function_call_output".
-	Output string `json:"output,omitempty"`
+	// Type "function_call_output". Same as Arguments — the key must be present
+	// even when a tool returned nothing.
+	Output string `json:"output"`
 }
 
-// ContentPart is a typed content block. Input text uses "input_text"; the
-// output text the model returns comes back as "output_text".
+// ContentPart is a typed content block. Input text uses "input_text"; assistant
+// text — both what the model returns and what is replayed back as conversation
+// history — uses "output_text".
+//
+// Text has no omitempty for the same reason as InputItem.Arguments: Mantle
+// rejects a content part with no "text" key, so an empty message must serialize
+// as "text":"" rather than dropping the field.
 type ContentPart struct {
 	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Text string `json:"text"`
+
+	// Set on "input_image" only. Mantle accepts a data: or s3:// URL here — an
+	// https URL is rejected — and the field is a bare string, not the nested
+	// object Chat Completions uses.
+	ImageURL string `json:"image_url,omitempty"`
 }
 
 // Tool is a Responses-API tool definition. Unlike Chat Completions, the

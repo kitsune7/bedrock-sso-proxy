@@ -18,7 +18,7 @@ import (
 // request has already been converted to the internal OpenAI shape, so this only
 // has to translate the response back to Ollama's frames.
 func (h *OllamaChatHandler) handleMantle(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, resolved models.Resolved) {
-	mreq, err := mantle.TranslateRequest(openaiReq, resolved)
+	mreq, err := mantle.TranslateRequest(r.Context(), openaiReq, resolved)
 	if err != nil {
 		writeOllamaError(w, http.StatusBadRequest, err.Error())
 		return

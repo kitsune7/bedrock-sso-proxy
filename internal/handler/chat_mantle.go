@@ -21,7 +21,7 @@ import (
 // Converse, but the client-facing shape is identical — the caller cannot tell
 // which Bedrock API served the request.
 func (h *ChatHandler) handleMantle(w http.ResponseWriter, r *http.Request, req *openai.ChatCompletionRequest, resolved models.Resolved) {
-	mreq, err := mantle.TranslateRequest(req, resolved)
+	mreq, err := mantle.TranslateRequest(r.Context(), req, resolved)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return

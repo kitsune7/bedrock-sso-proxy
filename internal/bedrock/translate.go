@@ -1,6 +1,7 @@
 package bedrock
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -11,13 +12,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/google/uuid"
 
+	"bedrock-sso-proxy/internal/imageref"
 	"bedrock-sso-proxy/internal/models"
 	"bedrock-sso-proxy/internal/openai"
 )
 
-// TranslateRequest converts an OpenAI ChatCompletionRequest into Bedrock ConverseInput.
-func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseInput, error) {
-	system, messages, err := translateMessages(req.Messages)
+// TranslateRequest converts an OpenAI ChatCompletionRequest into Bedrock
+// ConverseInput. ctx bounds the image fetches an image_url part may require.
+func TranslateRequest(ctx context.Context, req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseInput, error) {
+	system, messages, err := translateMessages(ctx, req.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +48,8 @@ func TranslateRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*be
 }
 
 // TranslateStreamRequest converts an OpenAI ChatCompletionRequest into Bedrock ConverseStreamInput.
-func TranslateStreamRequest(req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseStreamInput, error) {
-	system, messages, err := translateMessages(req.Messages)
+func TranslateStreamRequest(ctx context.Context, req *openai.ChatCompletionRequest, m models.Resolved) (*bedrockruntime.ConverseStreamInput, error) {
+	system, messages, err := translateMessages(ctx, req.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +143,7 @@ func TranslateResponse(output *bedrockruntime.ConverseOutput, model string) *ope
 	return resp
 }
 
-func translateMessages(msgs []openai.Message) ([]types.SystemContentBlock, []types.Message, error) {
+func translateMessages(ctx context.Context, msgs []openai.Message) ([]types.SystemContentBlock, []types.Message, error) {
 	var system []types.SystemContentBlock
 	var messages []types.Message
 
@@ -153,7 +156,7 @@ func translateMessages(msgs []openai.Message) ([]types.SystemContentBlock, []typ
 			}
 
 		case "user":
-			content, err := translateContentBlocks(msg)
+			content, err := translateContentBlocks(ctx, msg)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -213,21 +216,14 @@ func translateMessages(msgs []openai.Message) ([]types.SystemContentBlock, []typ
 	return system, messages, nil
 }
 
-func translateContentBlocks(msg openai.Message) ([]types.ContentBlock, error) {
+func translateContentBlocks(ctx context.Context, msg openai.Message) ([]types.ContentBlock, error) {
 	if len(msg.Content) == 0 {
 		return []types.ContentBlock{&types.ContentBlockMemberText{Value: ""}}, nil
 	}
 
-	// Try as plain string
-	var s string
-	if err := json.Unmarshal(msg.Content, &s); err == nil {
-		return []types.ContentBlock{&types.ContentBlockMemberText{Value: s}}, nil
-	}
-
-	// Try as array of content parts
-	var parts []openai.ContentPart
-	if err := json.Unmarshal(msg.Content, &parts); err != nil {
-		return nil, fmt.Errorf("failed to parse message content: %w", err)
+	parts := msg.Parts()
+	if parts == nil {
+		return nil, fmt.Errorf("failed to parse message content")
 	}
 
 	var blocks []types.ContentBlock
@@ -235,8 +231,31 @@ func translateContentBlocks(msg openai.Message) ([]types.ContentBlock, error) {
 		switch p.Type {
 		case "text":
 			blocks = append(blocks, &types.ContentBlockMemberText{Value: p.Text})
+
+		case "image_url":
+			if p.ImageURL == nil || p.ImageURL.URL == "" {
+				return nil, fmt.Errorf("image_url content part has no url")
+			}
+			// Converse takes raw bytes or an S3 location — never a URL — so an
+			// https image has to be fetched before it can be forwarded.
+			ref, err := imageref.Resolve(ctx, nil, p.ImageURL.URL)
+			if err != nil {
+				return nil, fmt.Errorf("image_url content part: %w", err)
+			}
+			block := types.ImageBlock{Format: types.ImageFormat(ref.Format)}
+			if ref.S3URI != "" {
+				block.Source = &types.ImageSourceMemberS3Location{
+					Value: types.S3Location{Uri: aws.String(ref.S3URI)},
+				}
+			} else {
+				block.Source = &types.ImageSourceMemberBytes{Value: ref.Bytes}
+			}
+			blocks = append(blocks, &types.ContentBlockMemberImage{Value: block})
+
 		default:
-			// Skip unsupported content types (image_url, etc.) for now
+			// Audio and file parts have no Converse equivalent. Failing beats
+			// silently dropping content the caller believes was sent.
+			return nil, fmt.Errorf("unsupported content part type: %s", p.Type)
 		}
 	}
 

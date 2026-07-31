@@ -21,6 +21,13 @@ start-launch-agent:
 stop-launch-agent:
   launchctl bootout gui/$(id -u)/local.bedrock-sso-proxy
 
+# Reload the agent to pick up code changes (it runs `just start`, i.e. `go run`)
+restart-launch-agent:
+  # `-` so a restart still works when the agent is not currently loaded.
+  -launchctl bootout gui/$(id -u)/local.bedrock-sso-proxy
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.bedrock-sso-proxy.plist
+  launchctl kickstart -k gui/$(id -u)/local.bedrock-sso-proxy
+
 check-launch-agent:
   launchctl print   gui/$(id -u)/local.bedrock-sso-proxy
 

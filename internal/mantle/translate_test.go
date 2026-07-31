@@ -1,6 +1,7 @@
 package mantle
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestTranslateRequest_ParameterAdaptation(t *testing.T) {
 		},
 	}
 
-	out, err := TranslateRequest(req, gpt55())
+	out, err := TranslateRequest(context.Background(), req, gpt55())
 	if err != nil {
 		t.Fatalf("TranslateRequest: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestTranslateRequest_SystemBecomesInstructions(t *testing.T) {
 		},
 	}
 
-	out, err := TranslateRequest(req, gpt55())
+	out, err := TranslateRequest(context.Background(), req, gpt55())
 	if err != nil {
 		t.Fatalf("TranslateRequest: %v", err)
 	}
@@ -112,13 +113,14 @@ func TestTranslateRequest_ToolCallRoundTrip(t *testing.T) {
 		}},
 	}
 
-	out, err := TranslateRequest(req, gpt55())
+	out, err := TranslateRequest(context.Background(), req, gpt55())
 	if err != nil {
 		t.Fatalf("TranslateRequest: %v", err)
 	}
 
 	// A tool call and its result are siblings in the flat input list, not
-	// fields of the messages around them.
+	// fields of the messages around them. The assistant message here carries
+	// only tool_calls and no text, so it contributes no message item.
 	wantTypes := []string{"message", "function_call", "function_call_output"}
 	if len(out.Input) != len(wantTypes) {
 		t.Fatalf("len(Input) = %d, want %d: %+v", len(out.Input), len(wantTypes), out.Input)
@@ -139,6 +141,154 @@ func TestTranslateRequest_ToolCallRoundTrip(t *testing.T) {
 	if len(out.Tools) != 1 || out.Tools[0].Name != "get_weather" || out.Tools[0].Type != "function" {
 		t.Errorf("Tools = %+v, want one inlined function tool", out.Tools)
 	}
+}
+
+// Mantle validates `input` as a strict union and rejects an item whose shape
+// does not match a variant exactly. Every case below was rejected with
+// "Invalid 'input': value did not match any expected variant" before the fix,
+// so the assertions are on the serialized JSON, not just the struct.
+func TestTranslateRequest_MantleUnionRequirements(t *testing.T) {
+	t.Run("assistant history uses output_text", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{
+			{Role: "user", Content: rawJSON(t, "hi")},
+			{Role: "assistant", Content: rawJSON(t, "hello")},
+			{Role: "user", Content: rawJSON(t, "again")},
+		}}
+		out, err := TranslateRequest(context.Background(), req, gpt55())
+		if err != nil {
+			t.Fatalf("TranslateRequest: %v", err)
+		}
+		// An assistant message carrying an input_text part is rejected, which
+		// breaks every multi-turn conversation.
+		if got := out.Input[1].Content[0].Type; got != "output_text" {
+			t.Errorf("assistant content type = %q, want output_text", got)
+		}
+		if got := out.Input[0].Content[0].Type; got != "input_text" {
+			t.Errorf("user content type = %q, want input_text", got)
+		}
+	})
+
+	t.Run("empty text still serializes the text key", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{
+			{Role: "user", Content: rawJSON(t, "")},
+		}}
+		out, err := TranslateRequest(context.Background(), req, gpt55())
+		if err != nil {
+			t.Fatalf("TranslateRequest: %v", err)
+		}
+		b, err := json.Marshal(out.Input[0].Content[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), `"text"`) {
+			t.Errorf("content part = %s, want an explicit text key", b)
+		}
+	})
+
+	t.Run("no-argument tool call still serializes arguments", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{
+			{Role: "user", Content: rawJSON(t, "time?")},
+			{Role: "assistant", ToolCalls: []openai.ToolCall{{
+				ID: "c1", Type: "function", Function: openai.FunctionCall{Name: "now"},
+			}}},
+			{Role: "tool", ToolCallID: "c1", Content: rawJSON(t, "")},
+		}}
+		out, err := TranslateRequest(context.Background(), req, gpt55())
+		if err != nil {
+			t.Fatalf("TranslateRequest: %v", err)
+		}
+		call, err := json.Marshal(out.Input[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(call), `"arguments"`) {
+			t.Errorf("function_call = %s, want an explicit arguments key", call)
+		}
+		// A tool that returns nothing is ordinary; the key must still be there.
+		output, err := json.Marshal(out.Input[2])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(output), `"output"`) {
+			t.Errorf("function_call_output = %s, want an explicit output key", output)
+		}
+	})
+
+	t.Run("system-only request is a client error", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{
+			{Role: "system", Content: rawJSON(t, "be terse")},
+		}}
+		// Responses requires at least one input item. Catching it here makes it a
+		// 400 rather than an upstream 400 surfaced to the client as a 502.
+		if _, err := TranslateRequest(context.Background(), req, gpt55()); err == nil {
+			t.Error("expected an error when no input items are produced")
+		}
+	})
+}
+
+func TestTranslateRequest_Images(t *testing.T) {
+	// A 1x1 PNG, base64-encoded. Mantle takes a bare data: or s3:// URL string,
+	// not the nested object Chat Completions uses.
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+	dataURL := "data:image/png;base64," + pngB64
+
+	t.Run("data URL becomes an input_image part", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{{
+			Role: "user",
+			Content: rawJSON(t, []map[string]any{
+				{"type": "text", "text": "what is this"},
+				{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
+			}),
+		}}}
+		out, err := TranslateRequest(context.Background(), req, gpt55())
+		if err != nil {
+			t.Fatalf("TranslateRequest: %v", err)
+		}
+		parts := out.Input[0].Content
+		if len(parts) != 2 {
+			t.Fatalf("len(Content) = %d, want 2: %+v", len(parts), parts)
+		}
+		if parts[0].Type != "input_text" || parts[0].Text != "what is this" {
+			t.Errorf("Content[0] = %+v, want the input_text part", parts[0])
+		}
+		if parts[1].Type != "input_image" {
+			t.Errorf("Content[1].Type = %q, want input_image", parts[1].Type)
+		}
+		// An https URL is rejected by Mantle, so the part must carry a data: URL.
+		if !strings.HasPrefix(parts[1].ImageURL, "data:image/png;base64,") {
+			t.Errorf("Content[1].ImageURL = %.40q, want a data: URL", parts[1].ImageURL)
+		}
+	})
+
+	t.Run("s3 URI passes through unfetched", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{{
+			Role: "user",
+			Content: rawJSON(t, []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": "s3://bucket/pic.png"}},
+			}),
+		}}}
+		out, err := TranslateRequest(context.Background(), req, gpt55())
+		if err != nil {
+			t.Fatalf("TranslateRequest: %v", err)
+		}
+		if got := out.Input[0].Content[0].ImageURL; got != "s3://bucket/pic.png" {
+			t.Errorf("ImageURL = %q, want the S3 URI unchanged", got)
+		}
+	})
+
+	// Silently dropping an image the caller believes was sent produces a
+	// confidently wrong answer, which is worse than a 400.
+	t.Run("unusable image is an error, not a drop", func(t *testing.T) {
+		req := &openai.ChatCompletionRequest{Messages: []openai.Message{{
+			Role: "user",
+			Content: rawJSON(t, []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": "ftp://host/pic.png"}},
+			}),
+		}}}
+		if _, err := TranslateRequest(context.Background(), req, gpt55()); err == nil {
+			t.Error("expected an error for an unsupported image scheme")
+		}
+	})
 }
 
 func TestTranslateToolChoice(t *testing.T) {

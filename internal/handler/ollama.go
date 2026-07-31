@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -61,7 +62,7 @@ func (h *OllamaChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OllamaChatHandler) handleNonStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, resolved models.Resolved) {
-	input, err := bedrock.TranslateRequest(openaiReq, resolved)
+	input, err := bedrock.TranslateRequest(r.Context(), openaiReq, resolved)
 	if err != nil {
 		writeOllamaError(w, http.StatusBadRequest, err.Error())
 		return
@@ -105,7 +106,7 @@ func (h *OllamaChatHandler) handleNonStream(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *OllamaChatHandler) handleStream(w http.ResponseWriter, r *http.Request, req *ollama.ChatRequest, openaiReq *openai.ChatCompletionRequest, resolved models.Resolved) {
-	input, err := bedrock.TranslateStreamRequest(openaiReq, resolved)
+	input, err := bedrock.TranslateStreamRequest(r.Context(), openaiReq, resolved)
 	if err != nil {
 		writeOllamaError(w, http.StatusBadRequest, err.Error())
 		return
@@ -280,7 +281,28 @@ func ollamaToOpenAI(req *ollama.ChatRequest) (*openai.ChatCompletionRequest, err
 	// of deterministic IDs and pop one per tool-result message.
 	var pendingToolIDs []string
 	for msgIdx, m := range req.Messages {
-		contentJSON, err := json.Marshal(m.Content)
+		// Ollama attaches images to a message as bare base64 strings alongside
+		// plain-text content; the OpenAI shape carries them as image_url parts, so
+		// a message with images becomes a parts array rather than a string.
+		var content any = m.Content
+		if len(m.Images) > 0 {
+			parts := []openai.ContentPart{{Type: "text", Text: m.Content}}
+			for _, img := range m.Images {
+				// Ollama sends raw base64 with no data: prefix. The media type is
+				// unknown and sniffed from the bytes later, so png is only a
+				// placeholder to form a well-shaped data URL.
+				url := img
+				if !strings.HasPrefix(url, "data:") {
+					url = "data:image/png;base64," + img
+				}
+				parts = append(parts, openai.ContentPart{
+					Type:     "image_url",
+					ImageURL: &openai.ImageURL{URL: url},
+				})
+			}
+			content = parts
+		}
+		contentJSON, err := json.Marshal(content)
 		if err != nil {
 			return nil, fmt.Errorf("encode message content: %w", err)
 		}
