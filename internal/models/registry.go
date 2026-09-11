@@ -77,6 +77,11 @@ var defaultModels = []Model{
 	// does not target, hence CrossRegion: false.
 	{Alias: "gpt-oss-120b", BedrockID: "openai.gpt-oss-120b-1:0", OwnedBy: "openai", Reasoning: true},
 	{Alias: "gpt-oss-20b", BedrockID: "openai.gpt-oss-20b-1:0", OwnedBy: "openai", Reasoning: true},
+	// GPT-6 Astra supports Converse through geo/global inference profiles on
+	// bedrock-runtime. CrossRegion selects the geo profile for the configured
+	// region; like GPT-5, Astra rejects sampling parameters and reasons within
+	// the output-token budget.
+	{Alias: "gpt-6-astra", BedrockID: "openai.gpt-6-astra", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 
 	// The GPT-5 family is reachable only through the OpenAI Responses API on
 	// the bedrock-mantle endpoint — no Converse, no Invoke, no bedrock-runtime.

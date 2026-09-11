@@ -4,7 +4,7 @@ A local OpenAI/Ollama-compatible proxy for Amazon Bedrock models using AWS SSO c
 
 The proxy lets tools that know how to talk to OpenAI's chat completions API, or Ollama's chat API, send requests to Bedrock. It uses your configured AWS profile, automatically launches `aws sso login` when credentials are missing or expired, and translates request/response shapes between the client API and Bedrock.
 
-Not every Bedrock model speaks the same API. Claude and gpt-oss are served by Converse/ConverseStream on `bedrock-runtime`; the GPT-5 family is served only by the OpenAI Responses API on the `bedrock-mantle` endpoint. The client does not need to care: the model name alone selects the backend, and the translation layer adapts parameters to whatever that model accepts.
+Not every Bedrock model speaks the same API. Claude, GPT-6 Astra, and gpt-oss are served by Converse/ConverseStream on `bedrock-runtime`; the GPT-5 family is served only by the OpenAI Responses API on the `bedrock-mantle` endpoint. The client does not need to care: the model name alone selects the backend, and the translation layer adapts parameters to whatever that model accepts.
 
 ## Features
 
@@ -174,7 +174,7 @@ http://localhost:8000
 
 Model aliases are defined in `internal/models/registry.go`. The registry maps friendly names such as `claude-sonnet-5` to Bedrock model or inference profile IDs, and also declares which API serves the model and which parameters it accepts. `GET /v1/models` lists everything registered.
 
-Anthropic models and `gpt-oss-120b` / `gpt-oss-20b` are served by Converse. The GPT-5 family (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`) is served only by the Responses API on Bedrock Mantle — there is no Converse or Invoke path for them, they have no cross-region inference profiles, and they are in-region only: `us-east-1` and `us-east-2` for all of them, plus `us-west-2` for `gpt-5.6-terra` and `gpt-5.6-luna`. Set `-region` accordingly if you want to use them.
+Anthropic models, `gpt-6-astra`, and `gpt-oss-120b` / `gpt-oss-20b` are served by Converse. Astra resolves to the geographic cross-region inference profile (for example, `us.openai.gpt-6-astra`) and supports `bedrock-runtime` from all documented regions. The GPT-5 family (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`) is served only by the Responses API on Bedrock Mantle — there is no Converse or Invoke path for them, they have no cross-region inference profiles, and they are in-region only: `us-east-1` and `us-east-2` for all of them, plus `us-west-2` for `gpt-5.6-terra` and `gpt-5.6-luna`. Set `-region` accordingly if you want to use them.
 
 There are known gaps in the default registry. Add models as needed by editing `defaultModels` in `internal/models/registry.go`:
 
