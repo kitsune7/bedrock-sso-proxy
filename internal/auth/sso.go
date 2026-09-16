@@ -18,9 +18,19 @@ import (
 
 // AuthManager handles AWS credential loading and automatic SSO session renewal.
 type AuthManager struct {
-	mu      sync.Mutex
-	cfg     aws.Config
-	client  *bedrockruntime.Client
+	// mu guards cfg/client/gen. Held only for field access — never across an
+	// interactive `aws sso login`, or every in-flight request would block on the
+	// browser round-trip.
+	mu     sync.Mutex
+	cfg    aws.Config
+	client *bedrockruntime.Client
+	// gen increments on every successful renewal, so a caller can tell whether
+	// the credentials it failed with have since been replaced.
+	gen uint64
+	// loginSlot is a context-aware mutex (capacity 1) serializing SSO logins.
+	loginSlot chan struct{}
+	// login shells out to `aws sso login`; overridden in tests.
+	login   func() error
 	profile string
 	region  string
 }
@@ -29,9 +39,11 @@ type AuthManager struct {
 // If SSO credentials are expired, it will attempt to authenticate immediately.
 func NewManager(profile, region string) (*AuthManager, error) {
 	am := &AuthManager{
-		profile: profile,
-		region:  region,
+		profile:   profile,
+		region:    region,
+		loginSlot: make(chan struct{}, 1),
 	}
+	am.login = am.runSSOLogin
 
 	if err := am.loadConfig(context.Background()); err != nil {
 		// Try SSO login if initial load suggests expired credentials
@@ -72,10 +84,13 @@ func NewManager(profile, region string) (*AuthManager, error) {
 // profile to log in to — so this is for tests and for callers that already hold
 // credentials.
 func NewManagerFromConfig(cfg aws.Config) *AuthManager {
-	return &AuthManager{
-		cfg:    cfg,
-		client: bedrockruntime.NewFromConfig(cfg),
+	am := &AuthManager{
+		cfg:       cfg,
+		client:    bedrockruntime.NewFromConfig(cfg),
+		loginSlot: make(chan struct{}, 1),
 	}
+	am.login = am.runSSOLogin
+	return am
 }
 
 // Client returns the current Bedrock runtime client.
@@ -106,6 +121,9 @@ func (am *AuthManager) WithRetryConfig(ctx context.Context, fn func(aws.Config) 
 }
 
 func (am *AuthManager) withRetry(ctx context.Context, fn func() error) error {
+	// Snapshot the generation *before* the call so renew can tell whether the
+	// credentials this attempt failed with are the current ones.
+	gen := am.generation()
 	err := fn()
 	if err == nil || !isSSOError(err) {
 		return err
@@ -114,35 +132,71 @@ func (am *AuthManager) withRetry(ctx context.Context, fn func() error) error {
 		// Nothing to log in to — see NewManagerFromConfig.
 		return err
 	}
-	if renewErr := am.renew(ctx); renewErr != nil {
+	if renewErr := am.renew(ctx, gen); renewErr != nil {
 		return fmt.Errorf("%w (original error: %v)", renewErr, err)
 	}
 	// Retry once with fresh credentials.
 	return fn()
 }
 
-// renew re-authenticates and rebuilds the config and client. fn must be called
-// outside this lock — the accessors take it too, and it is not reentrant.
-func (am *AuthManager) renew(ctx context.Context) error {
+func (am *AuthManager) generation() uint64 {
 	am.mu.Lock()
 	defer am.mu.Unlock()
+	return am.gen
+}
+
+// renew re-authenticates and rebuilds the config and client.
+//
+// It is single-flight on gen: a caller whose generation is already stale skips
+// the login outright, because a concurrent renew has just completed one. Without
+// that check, N requests failing on the same expired token each spawn their own
+// `aws sso login`, and every device code but the one the user actually approved
+// dies with InvalidGrantException — which fails those requests, which makes the
+// client retry, which spawns more logins. That loop is unbreakable by approving.
+func (am *AuthManager) renew(ctx context.Context, gen uint64) error {
+	// Context-aware lock: a caller that gives up while another login is in
+	// flight leaves rather than piling onto the browser queue.
+	select {
+	case am.loginSlot <- struct{}{}:
+		defer func() { <-am.loginSlot }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if am.generation() != gen {
+		// Another request already logged in. Our caller retries against it.
+		return nil
+	}
 
 	log.Println("SSO session expired during request. Launching browser for re-authentication...")
-	if err := am.runSSOLogin(); err != nil {
+	if err := am.login(); err != nil {
 		return fmt.Errorf("SSO re-authentication failed: %w", err)
 	}
-	if err := am.loadConfig(ctx); err != nil {
+	// Deliberately not ctx: the login and reload outlive the request that
+	// triggered them. Tying them to a request context meant a client that hung
+	// up mid-browser-flow killed the login for everyone waiting on it.
+	cfg, err := am.newConfig(context.Background())
+	if err != nil {
 		return fmt.Errorf("failed to reload AWS config after SSO login: %w", err)
 	}
-	am.client = bedrockruntime.NewFromConfig(am.cfg)
+
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.cfg = cfg
+	am.client = bedrockruntime.NewFromConfig(cfg)
+	am.gen++
 	return nil
 }
 
-func (am *AuthManager) loadConfig(ctx context.Context) error {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx,
+func (am *AuthManager) newConfig(ctx context.Context) (aws.Config, error) {
+	return awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithSharedConfigProfile(am.profile),
 		awsconfig.WithRegion(am.region),
 	)
+}
+
+func (am *AuthManager) loadConfig(ctx context.Context) error {
+	cfg, err := am.newConfig(ctx)
 	if err != nil {
 		return err
 	}
@@ -151,6 +205,8 @@ func (am *AuthManager) loadConfig(ctx context.Context) error {
 }
 
 func (am *AuthManager) runSSOLogin() error {
+	// ponytail: no timeout of our own — the AWS CLI already bounds its device-code
+	// poll (~10 min). Add one here only if that window proves too long to wait.
 	cmd := exec.Command("aws", "sso", "login", "--profile", am.profile)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -169,16 +225,20 @@ func isSSOError(err error) bool {
 	if errors.As(err, &apiErr) {
 		code := apiErr.ErrorCode()
 		switch code {
+		// AccessDeniedException is deliberately absent: it means authorization,
+		// not authentication. Treating it as an expired session opened a browser
+		// every time a model was ungranted or a call was throttled.
 		case "ExpiredTokenException",
 			"UnrecognizedClientException",
 			"InvalidIdentityToken",
-			"ExpiredToken",
-			"AccessDeniedException":
+			"ExpiredToken":
 			return true
 		}
 	}
 
-	// Check error message strings as fallback
+	// Check error message strings as fallback. Keep these specific to token
+	// expiry — "The SSO" and "sso login" also matched our own renewal-failure
+	// text, so a failed login classified as "needs a login".
 	msg := err.Error()
 	ssoIndicators := []string{
 		"SSO session",
@@ -186,8 +246,6 @@ func isSSOError(err error) bool {
 		"InvalidIdentityToken",
 		"expired SSO",
 		"refresh_token",
-		"sso login",
-		"The SSO",
 		"failed to refresh cached credentials",
 		"no cached credentials",
 	}
