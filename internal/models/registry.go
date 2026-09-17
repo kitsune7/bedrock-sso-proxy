@@ -62,6 +62,7 @@ type Model struct {
 }
 
 var defaultModels = []Model{
+	{Alias: "claude-fable-5-1", BedrockID: "anthropic.claude-fable-5-1", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-fable-5", BedrockID: "anthropic.claude-fable-5", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-opus-5", BedrockID: "anthropic.claude-opus-5", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-opus-4-8", BedrockID: "anthropic.claude-opus-4-8", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
