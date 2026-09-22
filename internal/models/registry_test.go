@@ -71,6 +71,31 @@ func TestResolveModelID_OllamaTagSuffix(t *testing.T) {
 	}
 }
 
+func TestResolveModelID_Opus55(t *testing.T) {
+	cfg := &config.Config{
+		DefaultModel: "claude-opus-5-5",
+		AWSRegion:    "us-east-1",
+		CrossRegion:  true,
+	}
+	r := NewRegistry(cfg)
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", "us.anthropic.claude-opus-5-5"},
+		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
+		{"claude-opus-5-5:latest", "us.anthropic.claude-opus-5-5"},
+		{"anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
+		{"us.anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
+	}
+	for _, tc := range cases {
+		if got := r.ResolveModelID(tc.in); got != tc.want {
+			t.Errorf("ResolveModelID(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestResolveModelID_Opus5(t *testing.T) {
 	cfg := &config.Config{
 		DefaultModel: "claude-opus-5",
@@ -110,6 +135,7 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		wantBackend Backend
 	}{
 		// Claude: cross-region prefix applies, Converse backend by default.
+		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5", BackendConverse},
 		{"claude-opus-5", "us.anthropic.claude-opus-5", BackendConverse},
 		// Astra uses a cross-region inference profile on bedrock-runtime.
 		{"gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
@@ -160,6 +186,7 @@ func TestResolve_Traits(t *testing.T) {
 		wantReasoning         bool
 	}{
 		{"claude-fable-5", true, false, true},
+		{"claude-opus-5-5", true, false, true},
 		{"claude-opus-5", true, false, true},
 		{"claude-opus-4-8", true, false, true},
 		{"claude-opus-4-7", true, false, true},
@@ -179,6 +206,8 @@ func TestResolve_Traits(t *testing.T) {
 		// A fully-qualified inference profile ID must resolve to its registry
 		// entry, traits included — otherwise a client sending the prefixed form
 		// would get temperature forwarded to a model that 400s on it.
+		{"us.anthropic.claude-opus-5-5", true, false, true},
+		{"anthropic.claude-opus-5-5", true, false, true},
 		{"us.anthropic.claude-opus-5", true, false, true},
 		{"anthropic.claude-opus-5", true, false, true},
 	}
