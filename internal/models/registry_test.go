@@ -137,11 +137,16 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		// Claude: cross-region prefix applies, Converse backend by default.
 		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5", BackendConverse},
 		{"claude-opus-5", "us.anthropic.claude-opus-5", BackendConverse},
-		// Astra uses a cross-region inference profile on bedrock-runtime.
+		// GPT-6 uses cross-region inference profiles on bedrock-runtime.
 		{"gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
 		{"gpt-6-astra:latest", "us.openai.gpt-6-astra", BackendConverse},
 		{"openai.gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
 		{"us.openai.gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
+		{"gpt-6-sol", "us.openai.gpt-6-sol", BackendConverse},
+		{"gpt-6-sol:latest", "us.openai.gpt-6-sol", BackendConverse},
+		{"us.openai.gpt-6-sol", "us.openai.gpt-6-sol", BackendConverse},
+		{"gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
+		{"openai.gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
 		// gpt-oss has no us./global. profile — the prefix must NOT be added, or
 		// Bedrock 400s on a nonexistent inference profile.
 		{"gpt-oss-120b", "openai.gpt-oss-120b-1:0", BackendConverse},
@@ -192,6 +197,8 @@ func TestResolve_Traits(t *testing.T) {
 		{"claude-opus-4-7", true, false, true},
 		{"claude-sonnet-5", true, false, true},
 		{"gpt-6-astra", true, false, true},
+		{"gpt-6-sol", true, false, true},
+		{"gpt-6-luna", true, false, true},
 		{"gpt-5.6-sol", true, false, true},
 		{"gpt-5.6-terra", true, false, true},
 		{"gpt-5.6-luna", true, false, true},
