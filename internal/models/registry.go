@@ -69,6 +69,7 @@ var defaultModels = []Model{
 	{Alias: "claude-opus-4-8", BedrockID: "anthropic.claude-opus-4-8", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-opus-4-7", BedrockID: "anthropic.claude-opus-4-7", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-opus-4-6", BedrockID: "anthropic.claude-opus-4-6-v1", OwnedBy: "anthropic", CrossRegion: true, ExclusiveSampling: true},
+	{Alias: "claude-sonnet-5-5", BedrockID: "anthropic.claude-sonnet-5-5", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-sonnet-5", BedrockID: "anthropic.claude-sonnet-5", OwnedBy: "anthropic", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "claude-sonnet-4-6", BedrockID: "anthropic.claude-sonnet-4-6", OwnedBy: "anthropic", CrossRegion: true, ExclusiveSampling: true},
 	{Alias: "claude-sonnet-4-5", BedrockID: "anthropic.claude-sonnet-4-5-20250929-v1:0", OwnedBy: "anthropic", CrossRegion: true, ExclusiveSampling: true},

@@ -136,6 +136,7 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 	}{
 		// Claude: cross-region prefix applies, Converse backend by default.
 		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5", BackendConverse},
+		{"claude-sonnet-5-5", "us.anthropic.claude-sonnet-5-5", BackendConverse},
 		{"claude-opus-5", "us.anthropic.claude-opus-5", BackendConverse},
 		// GPT-6 uses cross-region inference profiles on bedrock-runtime.
 		{"gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
@@ -195,6 +196,7 @@ func TestResolve_Traits(t *testing.T) {
 		{"claude-opus-5", true, false, true},
 		{"claude-opus-4-8", true, false, true},
 		{"claude-opus-4-7", true, false, true},
+		{"claude-sonnet-5-5", true, false, true},
 		{"claude-sonnet-5", true, false, true},
 		{"gpt-6-astra", true, false, true},
 		{"gpt-6-sol", true, false, true},
@@ -215,6 +217,7 @@ func TestResolve_Traits(t *testing.T) {
 		// would get temperature forwarded to a model that 400s on it.
 		{"us.anthropic.claude-opus-5-5", true, false, true},
 		{"anthropic.claude-opus-5-5", true, false, true},
+		{"us.anthropic.claude-sonnet-5-5", true, false, true},
 		{"us.anthropic.claude-opus-5", true, false, true},
 		{"anthropic.claude-opus-5", true, false, true},
 	}
