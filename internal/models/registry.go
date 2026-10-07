@@ -80,7 +80,7 @@ var defaultModels = []Model{
 	// does not target, hence CrossRegion: false.
 	{Alias: "gpt-oss-120b", BedrockID: "openai.gpt-oss-120b-1:0", OwnedBy: "openai", Reasoning: true},
 	{Alias: "gpt-oss-20b", BedrockID: "openai.gpt-oss-20b-1:0", OwnedBy: "openai", Reasoning: true},
-	// The GPT-6 family (Astra, Sol, Luna) supports Converse through geo/global
+	// The GPT-6 family (Astra, Sol, Luna, and 6.1 Sol) supports Converse through geo/global
 	// inference profiles on bedrock-runtime; the foundation models are
 	// INFERENCE_PROFILE-only. CrossRegion selects the geo profile for the
 	// configured region; like GPT-5, they reject sampling parameters and
@@ -88,6 +88,7 @@ var defaultModels = []Model{
 	{Alias: "gpt-6-astra", BedrockID: "openai.gpt-6-astra", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-6-sol", BedrockID: "openai.gpt-6-sol", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-6-luna", BedrockID: "openai.gpt-6-luna", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
+	{Alias: "gpt-6.1-sol", BedrockID: "openai.gpt-6.1-sol", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 
 	// The GPT-5 family is reachable only through the OpenAI Responses API on
 	// the bedrock-mantle endpoint — no Converse, no Invoke, no bedrock-runtime.

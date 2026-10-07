@@ -148,6 +148,10 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		{"us.openai.gpt-6-sol", "us.openai.gpt-6-sol", BackendConverse},
 		{"gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
 		{"openai.gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
+		{"gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
+		{"gpt-6.1-sol:latest", "us.openai.gpt-6.1-sol", BackendConverse},
+		{"openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
+		{"us.openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
 		// gpt-oss has no us./global. profile — the prefix must NOT be added, or
 		// Bedrock 400s on a nonexistent inference profile.
 		{"gpt-oss-120b", "openai.gpt-oss-120b-1:0", BackendConverse},
@@ -201,6 +205,7 @@ func TestResolve_Traits(t *testing.T) {
 		{"gpt-6-astra", true, false, true},
 		{"gpt-6-sol", true, false, true},
 		{"gpt-6-luna", true, false, true},
+		{"gpt-6.1-sol", true, false, true},
 		{"gpt-5.6-sol", true, false, true},
 		{"gpt-5.6-terra", true, false, true},
 		{"gpt-5.6-luna", true, false, true},
