@@ -152,6 +152,10 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		{"gpt-6.1-sol:latest", "us.openai.gpt-6.1-sol", BackendConverse},
 		{"openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
 		{"us.openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
+		{"gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
+		{"gpt-6.1-terra:latest", "us.openai.gpt-6.1-terra", BackendConverse},
+		{"openai.gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
+		{"us.openai.gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
 		// gpt-oss has no us./global. profile — the prefix must NOT be added, or
 		// Bedrock 400s on a nonexistent inference profile.
 		{"gpt-oss-120b", "openai.gpt-oss-120b-1:0", BackendConverse},
@@ -206,6 +210,7 @@ func TestResolve_Traits(t *testing.T) {
 		{"gpt-6-sol", true, false, true},
 		{"gpt-6-luna", true, false, true},
 		{"gpt-6.1-sol", true, false, true},
+		{"gpt-6.1-terra", true, false, true},
 		{"gpt-5.6-sol", true, false, true},
 		{"gpt-5.6-terra", true, false, true},
 		{"gpt-5.6-luna", true, false, true},
@@ -225,6 +230,7 @@ func TestResolve_Traits(t *testing.T) {
 		{"us.anthropic.claude-sonnet-5-5", true, false, true},
 		{"us.anthropic.claude-opus-5", true, false, true},
 		{"anthropic.claude-opus-5", true, false, true},
+		{"us.openai.gpt-6.1-terra", true, false, true},
 	}
 	for _, tc := range cases {
 		got := r.Resolve(tc.in)
