@@ -90,6 +90,7 @@ var defaultModels = []Model{
 	{Alias: "gpt-6-luna", BedrockID: "openai.gpt-6-luna", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-6.1-sol", BedrockID: "openai.gpt-6.1-sol", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-6.1-terra", BedrockID: "openai.gpt-6.1-terra", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
+	{Alias: "gpt-6.2-sol", BedrockID: "openai.gpt-6.2-sol", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 
 	// The GPT-5 family is reachable only through the OpenAI Responses API on
 	// the bedrock-mantle endpoint — no Converse, no Invoke, no bedrock-runtime.
