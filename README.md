@@ -4,6 +4,8 @@ A local OpenAI/Ollama-compatible proxy for Amazon Bedrock models using AWS SSO c
 
 The proxy lets tools that know how to talk to OpenAI's chat completions API, or Ollama's chat API, send requests to Bedrock. It uses your configured AWS profile, automatically launches `aws sso login` when credentials are missing or expired, and translates request/response shapes between the client API and Bedrock.
 
+SSO renewal is deliberately conservative. If the login at startup fails (for example nobody approved the browser prompt), the proxy keeps running and the first request that needs credentials retries it, so a process supervisor such as launchd does not restart it into a loop of prompts. After a login finishes, the proxy will not start another for 2 minutes if it failed, or for 30 minutes if it succeeded but AWS still rejected the credentials (such as a 403 "No access" because your identity has no assignment for the profile's account); fix the access, or run `aws sso login` yourself, and the next request picks it up.
+
 Not every Bedrock model speaks the same API. Claude, GPT-6 Astra, and gpt-oss are served by Converse/ConverseStream on `bedrock-runtime`; the GPT-5 family is served only by the OpenAI Responses API on the `bedrock-mantle` endpoint. The client does not need to care: the model name alone selects the backend, and the translation layer adapts parameters to whatever that model accepts.
 
 ## Features

@@ -21,7 +21,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize AWS auth: %v", err)
 	}
-	log.Println("AWS credentials loaded successfully")
+	if authMgr.CredentialsReady() {
+		log.Println("AWS credentials loaded successfully")
+	} else {
+		log.Println("Started without working AWS credentials; the first request that needs them will retry the SSO login")
+	}
 
 	registry := models.NewRegistry(cfg)
 	chatHandler := handler.NewChatHandler(authMgr, registry, cfg)
