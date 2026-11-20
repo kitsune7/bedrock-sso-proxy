@@ -82,8 +82,8 @@ var defaultModels = []Model{
 	{Alias: "gpt-oss-20b", BedrockID: "openai.gpt-oss-20b-1:0", OwnedBy: "openai", Reasoning: true},
 	// The GPT-6 family supports Converse through geo/global
 	// inference profiles on bedrock-runtime; the foundation models are
-	// INFERENCE_PROFILE-only. CrossRegion selects the geo profile for the
-	// configured region; like GPT-5, they reject sampling parameters and
+	// INFERENCE_PROFILE-only. CrossRegion defaults to the global profile;
+	// like GPT-5, these models reject sampling parameters and
 	// reason within the output-token budget.
 	{Alias: "gpt-6-astra", BedrockID: "openai.gpt-6-astra", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
 	{Alias: "gpt-6-sol", BedrockID: "openai.gpt-6-sol", OwnedBy: "openai", CrossRegion: true, NoSampling: true, Reasoning: true},
@@ -153,11 +153,11 @@ func (r *Registry) Resolve(input string) Resolved {
 	// entry and picks up the entry's backend and traits.
 	for _, candidate := range []string{input, trimRegionPrefix(input)} {
 		if m, ok := r.aliasMap[strings.ToLower(candidate)]; ok {
-			return r.resolved(m)
+			return r.resolved(m, input)
 		}
 		if i := strings.LastIndex(candidate, ":"); i > 0 {
 			if m, ok := r.aliasMap[strings.ToLower(candidate[:i])]; ok {
-				return r.resolved(m)
+				return r.resolved(m, input)
 			}
 		}
 	}
@@ -178,13 +178,13 @@ func (r *Registry) ResolveModelID(input string) string {
 	return r.Resolve(input).ID
 }
 
-func (r *Registry) resolved(m Model) Resolved {
+func (r *Registry) resolved(m Model, input string) Resolved {
 	backend := m.Backend
 	if backend == "" {
 		backend = BackendConverse
 	}
 	return Resolved{
-		ID:                r.applyRegionPrefix(m.BedrockID, m.CrossRegion),
+		ID:                r.profileID(m.BedrockID, input, m.CrossRegion),
 		Backend:           backend,
 		NoSampling:        m.NoSampling,
 		ExclusiveSampling: m.ExclusiveSampling,
@@ -242,12 +242,16 @@ func regionPrefix(region string) string {
 	return parts[0] + "."
 }
 
-func (r *Registry) applyRegionPrefix(bedrockID string, crossRegion bool) string {
+func (r *Registry) profileID(bedrockID, input string, crossRegion bool) string {
+	if bare := trimRegionPrefix(input); bare != input && crossRegion {
+		prefix, _, _ := strings.Cut(input, ".")
+		return strings.ToLower(prefix) + "." + trimRegionPrefix(bedrockID)
+	}
 	if !r.cfg.CrossRegion || !crossRegion {
 		return bedrockID
 	}
 	if hasRegionPrefix(bedrockID) {
 		return bedrockID
 	}
-	return regionPrefix(r.cfg.AWSRegion) + bedrockID
+	return "global." + bedrockID
 }

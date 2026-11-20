@@ -15,7 +15,7 @@ func TestResolveModelID_DefaultIsOpus47WithRegionPrefix(t *testing.T) {
 	r := NewRegistry(cfg)
 
 	got := r.ResolveModelID("")
-	want := "us.anthropic.claude-opus-4-7"
+	want := "global.anthropic.claude-opus-4-7"
 	if got != want {
 		t.Errorf("empty input: got %q, want %q", got, want)
 	}
@@ -33,8 +33,8 @@ func TestResolveModelID_Opus47AliasAndFullID(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"claude-opus-4-7", "us.anthropic.claude-opus-4-7"},
-		{"anthropic.claude-opus-4-7", "us.anthropic.claude-opus-4-7"},
+		{"claude-opus-4-7", "global.anthropic.claude-opus-4-7"},
+		{"anthropic.claude-opus-4-7", "global.anthropic.claude-opus-4-7"},
 		{"us.anthropic.claude-opus-4-7", "us.anthropic.claude-opus-4-7"},
 	}
 	for _, tc := range cases {
@@ -58,11 +58,11 @@ func TestResolveModelID_OllamaTagSuffix(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"claude-opus-4-7:latest", "us.anthropic.claude-opus-4-7"},
-		{"claude-sonnet-4-6:latest", "us.anthropic.claude-sonnet-4-6"},
-		{"claude-haiku-4-5:custom-tag", "us.anthropic.claude-haiku-4-5-20251001-v1:0"},
+		{"claude-opus-4-7:latest", "global.anthropic.claude-opus-4-7"},
+		{"claude-sonnet-4-6:latest", "global.anthropic.claude-sonnet-4-6"},
+		{"claude-haiku-4-5:custom-tag", "global.anthropic.claude-haiku-4-5-20251001-v1:0"},
 		// Bedrock IDs with embedded colons (":0") must still resolve.
-		{"anthropic.claude-haiku-4-5-20251001-v1:0", "us.anthropic.claude-haiku-4-5-20251001-v1:0"},
+		{"anthropic.claude-haiku-4-5-20251001-v1:0", "global.anthropic.claude-haiku-4-5-20251001-v1:0"},
 	}
 	for _, tc := range cases {
 		if got := r.ResolveModelID(tc.in); got != tc.want {
@@ -83,10 +83,10 @@ func TestResolveModelID_Opus55(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"", "us.anthropic.claude-opus-5-5"},
-		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
-		{"claude-opus-5-5:latest", "us.anthropic.claude-opus-5-5"},
-		{"anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
+		{"", "global.anthropic.claude-opus-5-5"},
+		{"claude-opus-5-5", "global.anthropic.claude-opus-5-5"},
+		{"claude-opus-5-5:latest", "global.anthropic.claude-opus-5-5"},
+		{"anthropic.claude-opus-5-5", "global.anthropic.claude-opus-5-5"},
 		{"us.anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5"},
 	}
 	for _, tc := range cases {
@@ -108,10 +108,10 @@ func TestResolveModelID_Opus5(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"", "us.anthropic.claude-opus-5"},
-		{"claude-opus-5", "us.anthropic.claude-opus-5"},
-		{"claude-opus-5:latest", "us.anthropic.claude-opus-5"},
-		{"anthropic.claude-opus-5", "us.anthropic.claude-opus-5"},
+		{"", "global.anthropic.claude-opus-5"},
+		{"claude-opus-5", "global.anthropic.claude-opus-5"},
+		{"claude-opus-5:latest", "global.anthropic.claude-opus-5"},
+		{"anthropic.claude-opus-5", "global.anthropic.claude-opus-5"},
 		{"us.anthropic.claude-opus-5", "us.anthropic.claude-opus-5"},
 	}
 	for _, tc := range cases {
@@ -135,30 +135,30 @@ func TestResolve_BackendAndRegionPrefix(t *testing.T) {
 		wantBackend Backend
 	}{
 		// Claude: cross-region prefix applies, Converse backend by default.
-		{"claude-opus-5-5", "us.anthropic.claude-opus-5-5", BackendConverse},
-		{"claude-sonnet-5-5", "us.anthropic.claude-sonnet-5-5", BackendConverse},
-		{"claude-opus-5", "us.anthropic.claude-opus-5", BackendConverse},
+		{"claude-opus-5-5", "global.anthropic.claude-opus-5-5", BackendConverse},
+		{"claude-sonnet-5-5", "global.anthropic.claude-sonnet-5-5", BackendConverse},
+		{"claude-opus-5", "global.anthropic.claude-opus-5", BackendConverse},
 		// GPT-6 uses cross-region inference profiles on bedrock-runtime.
-		{"gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
-		{"gpt-6-astra:latest", "us.openai.gpt-6-astra", BackendConverse},
-		{"openai.gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
+		{"gpt-6-astra", "global.openai.gpt-6-astra", BackendConverse},
+		{"gpt-6-astra:latest", "global.openai.gpt-6-astra", BackendConverse},
+		{"openai.gpt-6-astra", "global.openai.gpt-6-astra", BackendConverse},
 		{"us.openai.gpt-6-astra", "us.openai.gpt-6-astra", BackendConverse},
-		{"gpt-6-sol", "us.openai.gpt-6-sol", BackendConverse},
-		{"gpt-6-sol:latest", "us.openai.gpt-6-sol", BackendConverse},
+		{"gpt-6-sol", "global.openai.gpt-6-sol", BackendConverse},
+		{"gpt-6-sol:latest", "global.openai.gpt-6-sol", BackendConverse},
 		{"us.openai.gpt-6-sol", "us.openai.gpt-6-sol", BackendConverse},
-		{"gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
-		{"openai.gpt-6-luna", "us.openai.gpt-6-luna", BackendConverse},
-		{"gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
-		{"gpt-6.1-sol:latest", "us.openai.gpt-6.1-sol", BackendConverse},
-		{"openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
+		{"gpt-6-luna", "global.openai.gpt-6-luna", BackendConverse},
+		{"openai.gpt-6-luna", "global.openai.gpt-6-luna", BackendConverse},
+		{"gpt-6.1-sol", "global.openai.gpt-6.1-sol", BackendConverse},
+		{"gpt-6.1-sol:latest", "global.openai.gpt-6.1-sol", BackendConverse},
+		{"openai.gpt-6.1-sol", "global.openai.gpt-6.1-sol", BackendConverse},
 		{"us.openai.gpt-6.1-sol", "us.openai.gpt-6.1-sol", BackendConverse},
-		{"gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
-		{"gpt-6.1-terra:latest", "us.openai.gpt-6.1-terra", BackendConverse},
-		{"openai.gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
+		{"gpt-6.1-terra", "global.openai.gpt-6.1-terra", BackendConverse},
+		{"gpt-6.1-terra:latest", "global.openai.gpt-6.1-terra", BackendConverse},
+		{"openai.gpt-6.1-terra", "global.openai.gpt-6.1-terra", BackendConverse},
 		{"us.openai.gpt-6.1-terra", "us.openai.gpt-6.1-terra", BackendConverse},
-		{"gpt-6.2-sol", "us.openai.gpt-6.2-sol", BackendConverse},
-		{"gpt-6.2-sol:latest", "us.openai.gpt-6.2-sol", BackendConverse},
-		{"openai.gpt-6.2-sol", "us.openai.gpt-6.2-sol", BackendConverse},
+		{"gpt-6.2-sol", "global.openai.gpt-6.2-sol", BackendConverse},
+		{"gpt-6.2-sol:latest", "global.openai.gpt-6.2-sol", BackendConverse},
+		{"openai.gpt-6.2-sol", "global.openai.gpt-6.2-sol", BackendConverse},
 		{"us.openai.gpt-6.2-sol", "us.openai.gpt-6.2-sol", BackendConverse},
 		// gpt-oss has no us./global. profile — the prefix must NOT be added, or
 		// Bedrock 400s on a nonexistent inference profile.
