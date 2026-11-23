@@ -104,6 +104,8 @@ List models:
 curl http://localhost:8000/v1/models
 ```
 
+With the proxy running, `just models` prints the registered short names you can use as `model`, one per line. The recipe requires `jq` and uses `BEDROCK_PROXY_PORT` (default `8000`).
+
 Create a chat completion:
 
 ```bash

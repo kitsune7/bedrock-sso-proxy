@@ -10,6 +10,12 @@ heartbeat model="":
       -H 'Content-Type: application/json' \
       -d '{"model":"'"${model}"'","stream":false,"messages":[{"role":"user","content":"Reply with exactly: ok"}]}'
 
+# List model short names from the running proxy
+models:
+  @port="${BEDROCK_PROXY_PORT:-8000}"; \
+    response=$(curl -fsS "http://localhost:${port}/v1/models") && \
+    printf '%s\n' "$response" | jq -r '.data | sort_by(.id) | .[].id'
+
 # Mac-specific
 set-up-launch-agent:
   ./scripts/set-up-launch-agent.sh
